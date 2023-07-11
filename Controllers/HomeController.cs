@@ -1,17 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Web;
 using System.Web.Mvc;
 using Microsoft.Office.Interop.Word;
 using iTextSharp.text;
-using Aspose.Pdf;
-using static iTextSharp.text.pdf.AcroFields;
-using Aspose.Pdf.Operators;
-using System.Text;
-using iTextSharp.text.pdf;
-using iTextSharp.text.pdf.parser;
+using System.Drawing.Imaging;
 
 namespace FileViewer.Controllers
 {
@@ -43,57 +36,46 @@ namespace FileViewer.Controllers
             var exention = System.IO.Path.GetExtension(postedFile.FileName);
             if (exention.ToLower() == ".docx".ToLower())
             {
-                //Upload the word document and save to Temp folder.
                 postedFile.SaveAs(fileSavePath.ToString());
 
-                //Open the word document in background.
                 _Application applicationclass = new Application();
                 applicationclass.Documents.Open(ref fileSavePath);
                 applicationclass.Visible = false;
                 var document = applicationclass.ActiveDocument;
 
-                //Save the word document as HTML file.
                 document.SaveAs(ref htmlFilePath, ref documentFormat);
-
-                //Close the word document.
                 document.Close();
-
-                //Read the saved Html File.
                 string wordHTML = System.IO.File.ReadAllText(htmlFilePath.ToString());
 
-                //Loop and replace the Image Path.
-                //foreach (Match match in Regex.Matches(wordHTML, "<v:imagedata.+?src=[\"'](.+?)[\"'].*?>", RegexOptions.IgnoreCase))
-                //{
-                //    wordHTML = Regex.Replace(wordHTML, match.Groups[1].Value, "Temp/" + match.Groups[1].Value);
-                //}
-
-                //Delete the Uploaded Word File.
                 System.IO.File.Delete(fileSavePath.ToString());
-
                 ViewBag.WordHtml = wordHTML;
             }
             else if (exention.ToLower() == ".pdf".ToLower())
             {
-                if (!System.IO.Directory.Exists("~/DestinationFiles/"))
+                var FileName = Path.GetFileName(postedFile.FileName);
+                var Extenions = Path.GetExtension(postedFile.FileName);
+                string outputImagePath = HttpContext.Server.MapPath("~/DestinationFiles/"+ FileName+"/"+ Extenions);
+
+                // Convert PDF to image
+                using (var rasterizer = new Ghostscript.NET.Rasterizer.GhostscriptRasterizer())
                 {
-                    System.IO.Directory.CreateDirectory("~/DestinationFiles/");
-                }
-                string outputPath = HttpContext.Server.MapPath("~/DestinationFiles/");
-                StringBuilder text = new StringBuilder();
-                using (PdfReader reader = new PdfReader(postedFile.InputStream))
-                {
-                    for (int i = 1; i <= reader.NumberOfPages; i++)
+                    rasterizer.Open(postedFile.InputStream);
+
+                    // Set the resolution (in DPI) for the output image
+                    int dpi = 300;
+
+                    // Set the page index (starting from 1)
+                    int pageIndex = 1;
+
+                    // Render the PDF page to an image
+                    using (var image = rasterizer.GetPage(dpi, pageIndex))
                     {
-                        var x = PdfTextExtractor.GetTextFromPage(reader, i);
-                        text.AppendLine(PdfTextExtractor.GetTextFromPage(reader, i));
+                        // Save the image as PNG
+                        image.Save(outputImagePath, ImageFormat.Png);
                     }
                 }
-                using (StreamWriter outputFile = new StreamWriter(System.IO.Path.Combine(outputPath, "Pdf2Text.txt")))
-                {
-                    outputFile.WriteLine(text);
-                }
+                ViewBag.ImagePath = FileName + Extenions;
             }
-
             return View();
         }
     }
