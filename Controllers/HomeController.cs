@@ -5,6 +5,7 @@ using System.Web.Mvc;
 using Microsoft.Office.Interop.Word;
 using iTextSharp.text;
 using System.Drawing.Imaging;
+using System.Drawing;
 
 namespace FileViewer.Controllers
 {
@@ -54,9 +55,8 @@ namespace FileViewer.Controllers
             {
                 var FileName = Path.GetFileName(postedFile.FileName);
                 var Extenions = Path.GetExtension(postedFile.FileName);
-                string outputImagePath = HttpContext.Server.MapPath("~/DestinationFiles/"+ FileName+"/"+ Extenions);
+                string outputImagePath = HttpContext.Server.MapPath("~/DestinationFiles/"+ FileName);
 
-                // Convert PDF to image
                 using (var rasterizer = new Ghostscript.NET.Rasterizer.GhostscriptRasterizer())
                 {
                     rasterizer.Open(postedFile.InputStream);
@@ -64,17 +64,36 @@ namespace FileViewer.Controllers
                     // Set the resolution (in DPI) for the output image
                     int dpi = 300;
 
-                    // Set the page index (starting from 1)
-                    int pageIndex = 1;
+                    // Get the dimensions of the first page
+                    var firstPageImage = rasterizer.GetPage(dpi, 1);
+                    int imageWidth = firstPageImage.Width;
+                    int imageHeight = firstPageImage.Height;
 
-                    // Render the PDF page to an image
-                    using (var image = rasterizer.GetPage(dpi, pageIndex))
+                    // Create a blank canvas to hold the stacked image
+                    using (var stackedImage = new Bitmap(imageWidth, imageHeight * rasterizer.PageCount))
+                    using (var graphics = Graphics.FromImage(stackedImage))
                     {
-                        // Save the image as PNG
-                        image.Save(outputImagePath, ImageFormat.Png);
+                        // Set the background color (optional)
+                        graphics.Clear(Color.White);
+
+                        // Stack the pages on the canvas
+                        for (int pageIndex = 1; pageIndex <= rasterizer.PageCount; pageIndex++)
+                        {
+                            using (var pageImage = rasterizer.GetPage(dpi, pageIndex))
+                            {
+                                // Calculate the position to draw the current page
+                                int yPos = (pageIndex - 1) * imageHeight;
+
+                                // Draw the page onto the stacked image
+                                graphics.DrawImage(pageImage, 0, yPos);
+                            }
+                        }
+
+                        // Save the stacked image as PNG
+                        stackedImage.Save(outputImagePath, ImageFormat.Png);
                     }
                 }
-                ViewBag.ImagePath = FileName + Extenions;
+                ViewBag.ImagePath = "/DestinationFiles/"+FileName;
             }
             return View();
         }
